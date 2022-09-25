@@ -36,14 +36,6 @@ struct dfu_file {
     uint16_t bcdDevice;
 };
 
-
-
-enum prefix_req {
-    NO_PREFIX,
-    NEEDS_PREFIX,
-    MAYBE_PREFIX
-};
-
 enum prefix_type {
     ZERO_PREFIX,
     LMDFU_PREFIX,
@@ -51,17 +43,41 @@ enum prefix_type {
 };
 
 
-
+struct dfu_file parse_dfu_suffix(const uint8_t * file_contents, const size_t file_contents_length);
 ssize_t get_file_contents(const char* file_path_on_disk, uint8_t ** file_contents);
 
-// Parse a .dfu file and extract its payload and metadata
-int dfu_file_parse(const char* file_path_on_disk){
+/* Parse a .dfu file and extract its payload and metadata
+ * Returns 0 if file parsed correctly, negative on error
+ * Inputs:
+ * - File path to read from
+ *
+ * Outputs:
+ * - File payload contents
+ * - File payload start address
+ *
+ * Usage:
+ *   uint8_t* payload=NULL;
+ *   size_t payload_length=0;
+ *   int res = dfu_file_path("test.dfu",&payload,&payload_length);
+ *   ...
+ *   free(payload);
+ */
+
+int dfu_file_parse(const char* file_path_on_disk, uint8_t** payload, size_t* payload_length){
     uint8_t* dfu_file_contents =NULL;
     ssize_t  file_size = get_file_contents(file_path_on_disk,&dfu_file_contents);
     if (file_size <=0 || dfu_file_contents==NULL){
         return -1;
-
     }
+    //Parse DFU data
+    struct dfu_file  dfu_info = parse_dfu_suffix(dfu_file_contents,file_size);
+    //Check if its for a BL* chip
+    if (dfu_info.idVendor!=0xAAAA){
+        free(dfu_file_contents);
+        return -1;
+    }
+    //Okay we have done validation, walk firmware and extract the blob and the offset
+    
 
     return 0;
 }
