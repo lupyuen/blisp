@@ -5,7 +5,6 @@
 #ifndef BLISP_DFU_FILE_H
 #define BLISP_DFU_FILE_H
 
-
 #include <malloc.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -17,7 +16,9 @@ extern "C" {
 
 int dfu_file_parse(const char* file_path_on_disk, uint8_t** payload,
                    size_t* payload_length);
+// Internal
 
+static uint32_t crc32_byte(uint32_t accum, uint8_t delta);
 #ifdef __cplusplus
 };
 #endif
