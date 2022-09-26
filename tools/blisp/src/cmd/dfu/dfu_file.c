@@ -71,7 +71,7 @@ dfu_file_parse(const char* file_path_on_disk, uint8_t** payload,
     // Parse DFU data
     struct dfu_file dfu_info = parse_dfu_suffix(dfu_file_contents, file_size);
     // Check if its for a BL* chip
-    if (dfu_info.idVendor != 0xAAAA) {
+    if (dfu_info.idVendor != 10473) {
         free(dfu_file_contents);
         return -1;
     }
@@ -134,7 +134,7 @@ crc32_byte(uint32_t accum, uint8_t delta) {
 static int
 probe_prefix(struct dfu_file* file) {
     const uint8_t* prefix = file->firmware;
-
+    file->size.prefix = 0;
     if (file->size.total < LMDFU_PREFIX_LENGTH)
         return 1;
     if ((prefix[0] == 0x01) && (prefix[1] == 0x00)) {
@@ -164,6 +164,7 @@ parse_dfu_suffix(const uint8_t* file_contents,
     // This is nearly 1:1 based on
     // https://sourceforge.net/p/dfu-util/dfu-util/ci/master/tree/src/dfu_file.c#l368
     struct dfu_file output;
+    memset(&output, 0, sizeof(output));
     output.firmware = file_contents;
     output.size.total = (off_t)file_contents_length;
     /* Check for possible DFU file suffix by trying to parse one */
@@ -251,8 +252,13 @@ get_file_contents(const char* file_path_on_disk, uint8_t** file_contents) {
     size_t read_count;
     size_t file_size = 0;
     size_t read_total = 0;
-    file_contents = NULL;
+
     FILE* f;
+
+    if (file_contents == NULL) {
+        return -99;
+    }
+
     f = fopen(file_path_on_disk, "rb");
     if (f <= 0) {
         fprintf(stderr, "Could not open file %s for reading",
@@ -260,8 +266,8 @@ get_file_contents(const char* file_path_on_disk, uint8_t** file_contents) {
         return -1;
     }
 
-    file_size = fseek(f, 0, SEEK_END);
-
+    fseek(f, 0, SEEK_END);
+    file_size = ftell(f);
     fseek(f, 0, SEEK_SET);
     *file_contents = calloc(file_size, sizeof(uint8_t));
 
@@ -270,7 +276,7 @@ get_file_contents(const char* file_path_on_disk, uint8_t** file_contents) {
         /* read() limit on Linux, slightly below MAX_INT on Windows */
         if (to_read > 0x7ffff000)
             to_read = 0x7ffff000;
-        read_count = fread((*file_contents) + read_total, to_read, 1, f);
+        read_count = fread((*file_contents) + read_total, 1, to_read, f);
         if (read_count == 0)
             break;
         // If error and not end of file, break
