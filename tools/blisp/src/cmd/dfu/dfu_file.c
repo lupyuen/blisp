@@ -15,6 +15,7 @@ struct dfu_file {
     /* Different sizes */
     struct {
         off_t total;
+        off_t firmware;
         int prefix;
         int suffix;
     } size;
@@ -40,7 +41,9 @@ enum prefix_type {
 
 struct dfu_file parse_dfu_suffix(const uint8_t* file_contents,
                                  size_t file_contents_length);
-
+ssize_t parse_target(const uint8_t* data, uint8_t* out_ealt,
+                     uint8_t** out_data, size_t* out_data_size,
+                     size_t* out_data_address);
 ssize_t get_file_contents(const char* file_path_on_disk,
                           uint8_t** file_contents);
 
@@ -63,7 +66,7 @@ ssize_t get_file_contents(const char* file_path_on_disk,
 
 int
 dfu_file_parse(const char* file_path_on_disk, uint8_t** payload,
-               size_t* payload_length) {
+               size_t* payload_length, size_t* payload_address) {
     uint8_t* dfu_file_contents = NULL;
     ssize_t file_size
         = get_file_contents(file_path_on_disk, &dfu_file_contents);
@@ -73,20 +76,70 @@ dfu_file_parse(const char* file_path_on_disk, uint8_t** payload,
     // Parse DFU data
     struct dfu_file dfu_info = parse_dfu_suffix(dfu_file_contents, file_size);
     // Check if its for a BL* chip
-    if (dfu_info.idVendor != 0x28E9) {
-        free(dfu_file_contents);
-        return -1;
-    }
+    //    if (dfu_info.idVendor != 0x28E9) {
+    //        free(dfu_file_contents);
+    //        return -1;
+    //    }
     // Okay we have done validation, walk firmware and extract the blob and the
     // offset
-    int32_t address = ((int32_t*)dfu_info.firmware)[0];
-    int32_t offset = ((int32_t*)dfu_info.firmware)[1];
+    size_t data_consumed = 0;
+    while (data_consumed < dfu_info.size.firmware) {
+        uint8_t ealt = 0;
+        uint8_t* blob = NULL;
+        size_t blob_size = 0;
+        size_t blob_address = 0;
+        ssize_t res = parse_target(dfu_info.firmware + data_consumed, &ealt,
+                                   &blob, &blob_size, &blob_address);
+        if (res < 0) {
+            break;
+        }
+        if (ealt == 0 && blob_size > 0) {
+            // Firmware slot, lets prep this and return
+            *payload = calloc(blob_size, 1);
+            *payload_length = blob_size;
+            *payload_address = blob_address;
+            memcpy(*payload, blob, blob_size);
+            free(dfu_file_contents);
+            return 1;
+        }
+        data_consumed += res;
+    }
 
     return 0;
 }
 
-static int
-parse_target(struct dfu_file* dfu_info) {
+// Read next target, output data+size+alt. Returns bytes consumed
+ssize_t
+parse_target(const uint8_t* data, uint8_t* out_ealt, uint8_t** out_data,
+             size_t* out_data_size, size_t* out_data_address) {
+    if (data == NULL || out_ealt == NULL || out_data == NULL
+        || out_data_size == NULL) {
+        return -99;
+    }
+    if (data[0] != 'T' || data[1] != 'a') {
+        return -1;
+    }
+
+    *out_ealt = data[6];
+    uint8_t* tdata = data + 6 + 1 + 4 + 255;
+    uint32_t len_tdata = *((uint32_t*)tdata);
+    tdata += 4;
+    uint32_t num_images = *((uint32_t*)tdata);
+    tdata += 4;
+    ssize_t blob_length = 6 + 1 + 4 + 255 + 8 + len_tdata;
+    // Now read all the image blobs from this target
+    for (int i = 0; i < num_images; i++) {
+        uint32_t address = *((uint32_t*)tdata);
+        tdata += 4;
+        uint32_t len = *((uint32_t*)tdata);
+        tdata += 4;
+        *out_data = tdata;
+        *out_data_size = len;
+        *out_data_address = address;
+        return blob_length;
+        // tdata+=len;
+    }
+    return blob_length;
 }
 
 static int
@@ -195,7 +248,8 @@ checked:
 
     if (output.size.prefix) {
         const uint8_t* data = file_contents;
-        if (output.prefix_type == LMDFU_PREFIX) {
+        if (output.prefix_type == DFUSE_PREFIX) {
+        } else if (output.prefix_type == LMDFU_PREFIX) {
             printf("Possible TI Stellaris DFU prefix with "
                    "the following properties\n"
                    "Address:        0x%08x\n"
@@ -214,6 +268,8 @@ checked:
         output.firmware
             = output.firmware + output.size.prefix; // shift past prefix
     }
+    output.size.firmware
+        = output.size.total - (output.size.suffix + output.size.prefix);
     return output;
 }
 
