@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.22)
 project(blisp C)
-
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_C_STANDARD 23)
 
 option(BLISP_BUILD_CLI "Build CLI Tool" OFF)
+option(COMPILE_TESTS "Compile the tests" OFF)
 
 add_library(libblisp_obj OBJECT
         lib/blisp.c
@@ -55,3 +56,8 @@ endif()
 if(BLISP_BUILD_CLI)
     add_subdirectory(tools/blisp)
 endif()
+
+
+if(COMPILE_TESTS)
+    add_subdirectory(tools/blisp/src/cmd/dfu/tests)
+endif(COMPILE_TESTS)
