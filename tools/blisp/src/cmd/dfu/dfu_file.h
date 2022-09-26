@@ -18,7 +18,7 @@ int dfu_file_parse(const char* file_path_on_disk, uint8_t** payload,
                    size_t* payload_length);
 // Internal
 
-static uint32_t crc32_byte(uint32_t accum, uint8_t delta);
+uint32_t crc32_byte(uint32_t accum, uint8_t delta);
 #ifdef __cplusplus
 };
 #endif

@@ -14,7 +14,7 @@ add_library(GTest::GTest INTERFACE IMPORTED)
 target_link_libraries(GTest::GTest INTERFACE gtest_main)
 
 
-add_executable(dfu_file_test test_dfu_file.cpp ../dfu_file.c)
+add_executable(dfu_file_test test_dfu_file.cpp ../dfu_file.c ../dfu_crc.c)
 
 target_link_libraries(dfu_file_test
         PRIVATE
